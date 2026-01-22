@@ -3,7 +3,9 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export default async function handler(req, res) {
 
-  // ✅ CORS (required for Blogger)
+  /* ===============================
+     CORS (REQUIRED FOR BLOGGER)
+  =============================== */
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET,OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -14,7 +16,7 @@ export default async function handler(req, res) {
     if (!url) return res.json({ error: "YouTube URL required" });
 
     /* ===============================
-       1️⃣ CHECK CAPTIONS ONLY
+       CHECK CAPTIONS ONLY
     =============================== */
     if (check === "1") {
       try {
@@ -29,51 +31,53 @@ export default async function handler(req, res) {
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
     /* ===============================
-       2️⃣ TRY TRANSCRIPT FIRST
+       TRY TRANSCRIPT FIRST
     =============================== */
-    let transcript = null;
-
     try {
-      transcript = await YoutubeTranscript.fetchTranscript(url, { lang });
-    } catch {}
+      const transcript = await YoutubeTranscript.fetchTranscript(url, { lang });
 
-    if (transcript && transcript.length > 0) {
-      const text = transcript.map(t => t.text).join(" ").slice(0, 8000);
+      if (transcript && transcript.length > 0) {
+        const text = transcript
+          .map(t => t.text)
+          .join(" ")
+          .slice(0, 8000);
 
-      const prompt = `Summarize this YouTube video in ${lang}:\n\n${text}`;
-      const result = await model.generateContent(prompt);
+        const result = await model.generateContent(
+          `Summarize this YouTube video in ${lang}:\n\n${text}`
+        );
 
-      return res.json({
-        success: true,
-        mode: "transcript",
-        summary: result.response.text()
-      });
+        return res.json({
+          success: true,
+          mode: "transcript",
+          summary: result.response.text()
+        });
+      }
+    } catch {
+      // continue to fallback
     }
 
     /* ===============================
-       3️⃣ FALLBACK: TITLE-BASED SUMMARY
+       FALLBACK: TITLE-BASED SUMMARY
     =============================== */
-    const oembedUrl =
+    const metaRes = await fetch(
       "https://www.youtube.com/oembed?format=json&url=" +
-      encodeURIComponent(url);
+        encodeURIComponent(url)
+    );
 
-    const metaRes = await fetch(oembedUrl);
     if (!metaRes.ok) {
       return res.json({
-        error: "Captions not available and video metadata could not be fetched."
+        error: "Captions unavailable and metadata could not be fetched."
       });
     }
 
     const meta = await metaRes.json();
     const title = meta.title || "Unknown video";
 
-    const fallbackPrompt = `
-The YouTube video titled "${title}" does not have accessible captions.
-Based only on the title, generate a helpful high-level summary of what this video is likely about.
-Do NOT hallucinate specific events. Keep it general and informative.
-    `;
-
-    const fallbackResult = await model.generateContent(fallbackPrompt);
+    const fallbackResult = await model.generateContent(
+      `The YouTube video titled "${title}" does not provide captions.
+Generate a general, high-level summary of what this video is likely about.
+Do not invent specific facts. Keep it informative and safe.`
+    );
 
     return res.json({
       success: true,
@@ -83,7 +87,7 @@ Do NOT hallucinate specific events. Keep it general and informative.
 
   } catch (err) {
     return res.json({
-      error: "Unable to summarize this video right now."
+      error: "Unable to summarize this video."
     });
   }
 }
