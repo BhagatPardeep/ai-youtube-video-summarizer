@@ -1,0 +1,9 @@
+{
+  "name": "ai-youtube-video-summarizer",
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "@google/generative-ai": "^0.11.3",
+    "youtube-transcript": "^1.1.0"
+  }
+}
